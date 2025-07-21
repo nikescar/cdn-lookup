@@ -1,65 +1,78 @@
-# [![Coursera Course](./resources/banner.svg)](https://insight.paiml.com/nvd "Coursera Course")
+# CDN Lookup Tool
 
-# Rust CLI Example
+A Rust-based command-line tool to check if IP addresses belong to various CDN (Content Delivery Network) providers.
 
-A small Rust CLI example you can use to build on. With an emphasis on Linux and creating automation tools that solve a problem for you. This is the basis for DevOps principles that you can apply in day-to-day work.
+<details markdown>
 
-💡 Are you just looking for a 👉 [Rust template](https://github.com/alfredodeza/rust-template) to get started easily with a project? The [template](https://github.com/alfredodeza/rust-template) has everything you need!
+<summary>Features</summary>
 
-This repository is part of the Python and Rust CLI tools course:
+## Features
 
-- [1: Resources](https://github.com/alfredodeza/python-and-rust-tools) 
-- [2: Python CLI](https://github.com/alfredodeza/python-cli-example)
-- [3: Rust CLI](https://github.com/alfredodeza/rust-cli-example)  👈 You are here!
-- [4: Python Advanced CLI](https://github.com/alfredodeza/advanced-python-cli)
-- [5: Rust Advanced CLI](https://github.com/alfredodeza/advanced-rust-cli)
+- Checks IP addresses against multiple CDN provider IP ranges
+- Automatically downloads and caches provider IP lists
+- Updates provider data monthly
+- Supports both individual IP addresses and CIDR ranges
+- Fast lookup using efficient IP range matching
 
-
-## Practice Lab
-Use the [included practice lab](./lab.md) to apply the content you've learned in this week. Follow the steps to create your own repository and apply the requirements to complete the lab.
-
-## Setting up your environment
-Rust development requires certain tools to be installed on your system. The easiest way to do this is to use the [rustup](https://rustup.rs/) tool. This will install the Rust compiler and Cargo, the Rust package manager. Although you can install it in Linux using the package manager, I recommend using `rustup`. Use the following command or go through the [rustup.rs](https://rustup.rs/) website to install it.
+## Installation
 
 ```bash
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+cargo build --release
 ```
 
-This repository and video course focuses on the development side of command-line tools in Rust. It uses [Visual Studio Code](https://code.visualstudio.com/?WT.mc_id=academic-0000-alfredodeza) as the editor of choice. You can use any editor you like, but the instructions in this repository will be for VS Code.
+## How it works
 
-These are all the tools and editor extensions I recommend you install to get started:
+1. **Configuration**: Creates `~/.config/cdn-lookup/` directory if it doesn't exist
+2. **Provider List**: Downloads `providers.conf` from the repository if not present locally
+3. **Data Updates**: Checks for updates monthly using HTTP HEAD requests
+4. **IP Range Processing**: Downloads and processes IP lists from providers, extracting CIDR ranges and individual IPs
+5. **Lookup**: Efficiently matches input IP addresses against cached CIDR ranges
+6. **Output**: Reports which CDN providers (if any) contain the queried IP addresses
 
-- [Visual Studio Code](https://code.visualstudio.com/?WT.mc_id=academic-0000-alfredodeza)
-- [Rust and Cargo tools](https://rustup.rs/)
-- [Rust Analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer&WT.mc_id=academic-0000-alfredodeza)
-- [GitHub Copilot](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot&WT.mc_id=academic-0000-alfredodeza)
+## Provider Configuration
 
-As part of your development workflow, I highly suggest you use the following programs in the terminal regularly:
+The `providers.conf` file contains CDN provider definitions in the format:
+```
+provider_name|url|last_response_timestamp|last_checked_timestamp
+```
 
-- `cargo fmt` - Formats your code to the Rust standard
-- `cargo clippy` - Lints your code and helps you find errors and potential issues
-- `cargo check` - Checks your code for errors and allows you to fix them before compiling (which means its faster!)
+Example:
+```
+fastly|https://api.fastly.com/public-ip-list|0|0
+cloudflare|https://raw.githubusercontent.com/lord-alfred/ipranges/refs/heads/main/cloudflare/ipv4.txt|0|0
+```
 
+## Supported CDN Providers
 
-## Resources
-Explore additional content that you can use to learn more about the topics covered in this course.
+The tool supports checking against many CDN providers including:
+- Fastly
+- Cloudflare
+- Amazon CloudFront
+- Google
+- Microsoft
+- DigitalOcean
+- Oracle
+- And many more...
 
-- [Releasing](./resources/releasing.md)
+</details>
 
-**Coursera Courses**
+## Usage
 
-- [Linux and Bash for Data Engineering](https://www.coursera.org/learn/linux-and-bash-for-data-engineering-duke)
-- [Open Source Platforms for MLOps](https://www.coursera.org/learn/open-source-platforms-duke)
-- [Python Essentials for MLOps](https://www.coursera.org/learn/python-essentials-mlops-duke)
-- [Web Applications and Command-Line tools for Data Engineering](https://www.coursera.org/learn/web-app-command-line-tools-for-data-engineering-duke)
-- [Python and Pandas for Data Engineering](https://www.coursera.org/learn/python-and-pandas-for-data-engineering-duke)
-- [Scripting with Python and SQL for Data Engineering](https://www.coursera.org/learn/scripting-with-python-sql-for-data-engineering-duke)
+Check multiple IP addresses:
+```bash
+$ cdn-lookup 8.8.8.8 1.1.1.1 104.16.123.96
+```
 
-**O'Reilly Courses and Books**
+Check IP addresses from a list (space or newline separated):
+```bash
+echo "8.8.8.8 1.1.1.1" | xargs cdn-lookup
+```
 
-- [Python for DevOps](https://www.oreilly.com/library/view/python-for-devops/9781492057680/) (Book)
-- [Practical MLOps](https://www.oreilly.com/library/view/practical-mlops/9781098103002/) (Book)
-- [Linux For Beginners](https://learning.oreilly.com/videos/-/27922450VIDEOPAIML/) (Video)
-- [GitHub Codespaces Course](https://learning.oreilly.com/videos/-/27724023VIDEOPAIML/) (Video)
-- [Python Command-line Tools course](https://learning.oreilly.com/videos/python-command-line/50131VIDEOPAIML/) (Video)
-# cdn-lookup
+## Output Examples
+
+```bash
+$ cdn-lookup 8.8.8.8 104.16.123.96 192.168.1.1
+8.8.8.8: Found in google
+104.16.123.96: Found in cloudflare
+192.168.1.1: -
+```

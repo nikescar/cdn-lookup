@@ -194,6 +194,7 @@ jobs:
           tag_name: ${{ github.ref_name }}
           fail_on_unmatched_files: true
           # draft: true
+          make_latest: true
           files: distbin/*
           token: ${{ secrets.RELEASE_TOKEN }}
           

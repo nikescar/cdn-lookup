@@ -120,21 +120,15 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
           # Extract version from tag (remove 'v' prefix)
-          VERSION=${GITHUB_REF#refs/tags/v}
+          VERSION=$(git describe --exact-match --tags)
           echo "Updating version to: $VERSION"
           
           # Update Cargo.toml
           sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
           
-          # Since main.rs now uses env!("CARGO_PKG_VERSION"), no need to update it manually
-          # The version will be automatically pulled from Cargo.toml during build
-          
-          # Commit changes back to repository
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add Cargo.toml
-          git commit -m "Update version to $VERSION" || exit 0
-          git push
+      - uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: Add changelog automatically
 
       # Linux & Windows
       - name: Install rust toolchain for Linux

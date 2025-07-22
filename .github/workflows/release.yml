@@ -116,20 +116,6 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Update version in files
-        if: startsWith(github.ref, 'refs/tags/v')
-        run: |
-          # Extract version from tag (remove 'v' prefix)
-          VERSION=$(git describe --exact-match --tags)
-          echo "Updating version to: $VERSION"
-          
-          # Update Cargo.toml
-          sed -i "s/^version = \".*\"/version = \"$VERSION\"/" Cargo.toml
-          
-      - uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          commit_message: Add changelog automatically
-
       # Linux & Windows
       - name: Install rust toolchain for Linux
         uses: actions-rs/toolchain@v1

@@ -162,25 +162,36 @@ impl CdnLookup {
     }
 
     fn process_provider_data(&self, provider_name: &str, content: &str) -> Result<()> {
-        let ip_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")?;
-        let cidr_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}\b")?;
-        
         let mut cidrs = Vec::new();
 
-        // Extract CIDR ranges
-        for cap in cidr_regex.find_iter(content) {
-            if let Ok(cidr) = cap.as_str().parse::<IpNet>() {
-                cidrs.push(cidr);
+        // Try JSON parsing first
+        let trimmed = content.trim();
+        if (trimmed.starts_with('{') || trimmed.starts_with('[')) &&
+           (serde_json::from_str::<serde_json::Value>(content).is_ok()) {
+            // JSON format
+            if let Ok(json) = serde_json::from_str::<serde_json::Value>(content) {
+                self.extract_cidrs_from_json(&json, &mut cidrs);
             }
-        }
+        } else {
+            // Plain text format (existing logic)
+            let ip_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")?;
+            let cidr_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}\b")?;
 
-        // Extract individual IPs and convert to /32 CIDR
-        for cap in ip_regex.find_iter(content) {
-            let ip_str = cap.as_str();
-            if !cidr_regex.is_match(&format!("{}/", ip_str)) { // Skip if already part of CIDR
-                if let Ok(ip) = ip_str.parse::<IpAddr>() {
-                    if let Ok(cidr) = format!("{}/32", ip).parse::<IpNet>() {
-                        cidrs.push(cidr);
+            // Extract CIDR ranges
+            for cap in cidr_regex.find_iter(content) {
+                if let Ok(cidr) = cap.as_str().parse::<IpNet>() {
+                    cidrs.push(cidr);
+                }
+            }
+
+            // Extract individual IPs and convert to /32 CIDR
+            for cap in ip_regex.find_iter(content) {
+                let ip_str = cap.as_str();
+                if !cidr_regex.is_match(&format!("{}/", ip_str)) {
+                    if let Ok(ip) = ip_str.parse::<IpAddr>() {
+                        if let Ok(cidr) = format!("{}/32", ip).parse::<IpNet>() {
+                            cidrs.push(cidr);
+                        }
                     }
                 }
             }
@@ -195,6 +206,41 @@ impl CdnLookup {
 
         eprintln!("Processed {} CIDR ranges for {}", cidrs.len(), provider_name);
         Ok(())
+    }
+
+    fn extract_cidrs_from_json(&self, json: &serde_json::Value, cidrs: &mut Vec<IpNet>) {
+        match json {
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    self.extract_cidrs_from_json(item, cidrs);
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                // Check for ipv4Prefix field
+                if let Some(serde_json::Value::String(prefix)) = obj.get("ipv4Prefix") {
+                    if let Ok(cidr) = prefix.parse::<IpNet>() {
+                        cidrs.push(cidr);
+                    }
+                }
+                // Check for ip_prefix field (alternative naming)
+                if let Some(serde_json::Value::String(prefix)) = obj.get("ip_prefix") {
+                    if let Ok(cidr) = prefix.parse::<IpNet>() {
+                        cidrs.push(cidr);
+                    }
+                }
+                // Check for prefix field
+                if let Some(serde_json::Value::String(prefix)) = obj.get("prefix") {
+                    if let Ok(cidr) = prefix.parse::<IpNet>() {
+                        cidrs.push(cidr);
+                    }
+                }
+                // Recursively check nested objects
+                for value in obj.values() {
+                    self.extract_cidrs_from_json(value, cidrs);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn save_providers(&self) -> Result<()> {

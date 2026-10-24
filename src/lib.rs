@@ -8,7 +8,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use chrono::DateTime;
-use gix;
 use ipnet::IpNet;
 use regex::Regex;
 
@@ -54,31 +53,20 @@ impl GitRepoManager {
         let repo_path = self.repos_dir.join(repo_name);
 
         if repo_path.exists() {
-            // For updates, just re-clone (simple and handles force-pushes)
-            // Remove existing repo
             fs::remove_dir_all(&repo_path)
                 .context("Failed to remove existing repository")?;
         }
 
-        // Shallow clone
-        let (mut checkout, _outcome) = gix::prepare_clone(repo_url, &repo_path)
-            .context("Failed to prepare clone")?
-            .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
-                std::num::NonZeroU32::new(1).unwrap(),
-            ))
-            .fetch_then_checkout(
-                gix::progress::Discard,
-                &std::sync::atomic::AtomicBool::default(),
-            )
-            .context("Failed to fetch repository")?;
+        let output = std::process::Command::new("git")
+            .args(["clone", "--depth", "1", repo_url])
+            .arg(&repo_path)
+            .output()
+            .context("Failed to execute git clone")?;
 
-        // Checkout working tree
-        let (_repo, _outcome) = checkout
-            .main_worktree(
-                gix::progress::Discard,
-                &std::sync::atomic::AtomicBool::default(),
-            )
-            .context("Failed to checkout working tree")?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            anyhow::bail!("git clone failed: {}", stderr);
+        }
 
         Ok(repo_path)
     }

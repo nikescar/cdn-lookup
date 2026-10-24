@@ -8,6 +8,10 @@ use cdn_lookup::{CdnLookup, run_cdn_lookup};
 struct Cli {
     /// IP addresses to check, separated by spaces
     ip_addresses: Vec<String>,
+
+    /// Force refresh all providers, ignoring cache
+    #[arg(short, long)]
+    refresh: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -29,7 +33,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut cdn_lookup = CdnLookup::new()?;
+    let mut cdn_lookup = CdnLookup::new(cli.refresh)?;
     run_cdn_lookup(&mut cdn_lookup, &all_ips)?;
 
     Ok(())

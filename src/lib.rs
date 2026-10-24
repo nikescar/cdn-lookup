@@ -46,10 +46,11 @@ pub struct CdnLookup {
     config_dir: PathBuf,
     providers: Vec<Provider>,
     ip_ranges: HashMap<String, Vec<IpNet>>,
+    refresh: bool,
 }
 
 impl CdnLookup {
-    pub fn new() -> Result<Self> {
+    pub fn new(refresh: bool) -> Result<Self> {
         let config_dir = Self::get_config_dir()?;
         let providers = Self::load_providers(&config_dir)?;
 
@@ -57,6 +58,7 @@ impl CdnLookup {
             config_dir,
             providers,
             ip_ranges: HashMap::new(),
+            refresh,
         })
     }
 
@@ -77,10 +79,10 @@ impl CdnLookup {
         
         // Download providers.conf if it doesn't exist
         if !providers_file.exists() {
-            println!("Downloading providers.conf...");
+            eprintln!("Downloading providers.conf...");
             let response = minreq::get(PROVIDERS_URL).send()?;
             let content = response.as_str()?;
-            
+
             let mut file = fs::File::create(&providers_file)?;
             file.write_all(content.as_bytes())?;
         }
@@ -106,11 +108,12 @@ impl CdnLookup {
 
         // First pass: collect data to download
         for provider in &mut self.providers {
-            let should_check_remote = current_timestamp - provider.last_checked_timestamp > ONE_MONTH_SECONDS;
-            
+            let should_check_remote = self.refresh ||
+                current_timestamp - provider.last_checked_timestamp > ONE_MONTH_SECONDS;
+
             if should_check_remote {
-                println!("Checking {} for updates...", provider.name);
-                
+                eprintln!("Checking {} for updates...", provider.name);
+
                 // HEAD request to check Last-Modified
                 match minreq::head(&provider.url).send() {
                     Ok(response) => {
@@ -125,7 +128,7 @@ impl CdnLookup {
                         };
 
                         if remote_timestamp > provider.last_response_timestamp {
-                            println!("Downloading updated data for {}...", provider.name);
+                            eprintln!("Downloading updated data for {}...", provider.name);
                             if let Ok(response) = minreq::get(&provider.url).send() {
                                 if let Ok(content) = response.as_str() {
                                     downloads.push((provider.name.clone(), content.to_string()));
@@ -137,8 +140,7 @@ impl CdnLookup {
                         provider.last_checked_timestamp = current_timestamp;
                     }
                     Err(e) => {
-                        eprintln!("Failed to check {}: {}", provider.name, e);
-                        provider.last_checked_timestamp = current_timestamp;
+                        eprintln!("Warning: Skipping {}: {}", provider.name, e);
                     }
                 }
             } else {
@@ -191,7 +193,7 @@ impl CdnLookup {
             writeln!(file, "{}", cidr)?;
         }
 
-        println!("Processed {} CIDR ranges for {}", cidrs.len(), provider_name);
+        eprintln!("Processed {} CIDR ranges for {}", cidrs.len(), provider_name);
         Ok(())
     }
 
@@ -268,17 +270,17 @@ pub fn run_cdn_lookup(cdn_lookup: &mut CdnLookup, ip_addresses: &[String]) -> Re
     for provider in &cdn_lookup.providers.clone() {
         let cidr_file = cdn_lookup.config_dir.join(format!("{}.cidr", provider.name));
         if !cidr_file.exists() {
-            println!("Downloading initial data for {}...", provider.name);
+            eprintln!("Downloading initial data for {}...", provider.name);
             match minreq::get(&provider.url).send() {
                 Ok(response) => {
                     if let Ok(content) = response.as_str() {
                         if let Err(e) = cdn_lookup.process_provider_data(&provider.name, content) {
-                            eprintln!("Failed to process data for {}: {}", provider.name, e);
+                            eprintln!("Warning: Failed to process data for {}: {}", provider.name, e);
                         }
                     }
                 }
                 Err(e) => {
-                    eprintln!("Failed to download data for {}: {}", provider.name, e);
+                    eprintln!("Warning: Skipping {}: {}", provider.name, e);
                 }
             }
         }

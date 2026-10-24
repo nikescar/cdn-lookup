@@ -161,13 +161,13 @@ jobs:
           - name: OpenBSD x86_64
             os: openbsd
             architecture: x86-64
-            version: '8.0'
+            version: '7.9'
             target: x86_64-unknown-openbsd
 
           - name: OpenBSD aarch64
             os: openbsd
             architecture: arm64
-            version: '8.0'
+            version: '7.9'
             target: aarch64-unknown-openbsd
 
     steps:
@@ -177,7 +177,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Build on OpenBSD
+      - name: Start OpenBSD VM
         uses: cross-platform-actions/action@v1.6.0
         with:
           operating_system: ${{ matrix.platform.os }}
@@ -186,9 +186,12 @@ jobs:
           memory: 5G
           cpu_count: 4
           sync_files: runner-to-vm
-          run: |
-            sudo pkg_add rust
-            cargo build --release --package ${{ env.BIN_NAME }}
+
+      - name: Build on OpenBSD
+        shell: cpa.sh {0}
+        run: |
+          sudo pkg_add rust
+          cargo build --release --package ${{ env.BIN_NAME }}
 
       - name: Store artifact
         uses: actions/upload-artifact@v4

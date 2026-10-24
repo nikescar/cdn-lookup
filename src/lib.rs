@@ -48,7 +48,7 @@ impl GitRepoManager {
         Some((repo_url, branch.to_string(), file_path))
     }
 
-    fn ensure_repo(&self, repo_url: &str, branch: &str) -> Result<PathBuf> {
+    fn ensure_repo(&self, repo_url: &str, _branch: &str) -> Result<PathBuf> {
         let repo_name = repo_url.split('/').last()
             .ok_or_else(|| anyhow::anyhow!("Invalid repo URL"))?;
         let repo_path = self.repos_dir.join(repo_name);
@@ -58,28 +58,27 @@ impl GitRepoManager {
             // Remove existing repo
             fs::remove_dir_all(&repo_path)
                 .context("Failed to remove existing repository")?;
-
-            // Fall through to clone
         }
 
         // Shallow clone
         let (mut checkout, _outcome) = gix::prepare_clone(repo_url, &repo_path)
             .context("Failed to prepare clone")?
             .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
-                std::num::NonZeroU32::new(1).unwrap()
+                std::num::NonZeroU32::new(1).unwrap(),
             ))
-            .with_ref_name(Some(branch))
-            .context("Failed to set branch")?
             .fetch_then_checkout(
                 gix::progress::Discard,
                 &std::sync::atomic::AtomicBool::default(),
             )
-            .context("Failed to fetch")?;
+            .context("Failed to fetch repository")?;
 
-        let (_repo, _outcome) = checkout.main_worktree(
-            gix::progress::Discard,
-            &std::sync::atomic::AtomicBool::default(),
-        ).context("Failed to checkout working tree")?;
+        // Checkout working tree
+        let (_repo, _outcome) = checkout
+            .main_worktree(
+                gix::progress::Discard,
+                &std::sync::atomic::AtomicBool::default(),
+            )
+            .context("Failed to checkout working tree")?;
 
         Ok(repo_path)
     }
@@ -88,7 +87,8 @@ impl GitRepoManager {
         let (repo_url, branch, file_path) = self.parse_git_url(git_url)
             .ok_or_else(|| anyhow::anyhow!("Invalid git URL: {}", git_url))?;
 
-        let repo_path = self.ensure_repo(&repo_url, &branch)?;
+        let repo_path = self.ensure_repo(&repo_url, &branch)
+            .with_context(|| format!("Failed to clone/update repo: {}", repo_url))?;
         let file_full_path = repo_path.join(&file_path);
 
         if !file_full_path.exists() {

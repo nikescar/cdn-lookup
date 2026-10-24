@@ -53,19 +53,30 @@ impl GitRepoManager {
         let repo_path = self.repos_dir.join(repo_name);
 
         if repo_path.exists() {
-            fs::remove_dir_all(&repo_path)
-                .context("Failed to remove existing repository")?;
-        }
+            // Update existing repo
+            let output = std::process::Command::new("git")
+                .args(["-C"])
+                .arg(&repo_path)
+                .args(["pull", "--depth", "1"])
+                .output()
+                .context("Failed to execute git pull")?;
 
-        let output = std::process::Command::new("git")
-            .args(["clone", "--depth", "1", repo_url])
-            .arg(&repo_path)
-            .output()
-            .context("Failed to execute git clone")?;
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("git pull failed: {}", stderr);
+            }
+        } else {
+            // Clone new repo
+            let output = std::process::Command::new("git")
+                .args(["clone", "--depth", "1", repo_url])
+                .arg(&repo_path)
+                .output()
+                .context("Failed to execute git clone")?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("git clone failed: {}", stderr);
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                anyhow::bail!("git clone failed: {}", stderr);
+            }
         }
 
         Ok(repo_path)

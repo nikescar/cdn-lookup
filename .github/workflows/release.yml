@@ -91,7 +91,7 @@ jobs:
     steps:
       - name: Install package for linux
         if: contains(matrix.platform.target, 'linux')
-        run: sudo apt install musl-tools
+        run: sudo apt install musl-tools libssl-dev pkg-config
 
       - name: Install package for Android
         if: contains(matrix.platform.target, 'android')
@@ -165,7 +165,7 @@ jobs:
           - name: FreeBSD x86_64
             os: freebsd
             architecture: x86-64
-            version: '15.1'
+            version: '14.2'
             target: x86_64-unknown-freebsd
 
           - name: OpenBSD x86_64
@@ -183,13 +183,13 @@ jobs:
           - name: NetBSD x86_64
             os: netbsd
             architecture: x86-64
-            version: '11.0'
+            version: '10.1'
             target: x86_64-unknown-netbsd
 
           - name: NetBSD aarch64
             os: netbsd
             architecture: arm64
-            version: '11.0'
+            version: '10.1'
             target: aarch64-unknown-netbsd
 
     steps:
@@ -209,11 +209,36 @@ jobs:
           cpu_count: 4
           sync_files: runner-to-vm
 
+      - name: Install packages on ${{ matrix.platform.os }}
+        shell: cpa.sh {0}
+        run: |
+          if [ "${{ matrix.platform.os }}" = "freebsd" ]; then
+            sudo pkg install -y git protobuf llvm15
+          elif [ "${{ matrix.platform.os }}" = "netbsd" ]; then
+            sudo pkgin -y install git curl clang jq
+          elif [ "${{ matrix.platform.os }}" = "openbsd" ]; then
+            sudo pkg_add rust
+          fi
+
+      - name: Install Rust on ${{ matrix.platform.os }}
+        if: matrix.platform.os != 'openbsd'
+        shell: cpa.sh {0}
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          rustc --version
+          cargo --version
+
       - name: Build on ${{ matrix.platform.os }}
         shell: cpa.sh {0}
         run: |
-          sudo pkg_add rust
-          cargo build --release --package ${{ env.BIN_NAME }}
+          if [ "${{ matrix.platform.os }}" != "openbsd" ]; then
+            source $HOME/.cargo/env
+            export CC=clang
+            export CXX=clang++
+          fi
+          export CARGO_TERM_COLOR=always
+          cargo build --release --package ${{ env.BIN_NAME }} --target ${{ matrix.platform.target }}
 
       - name: Store artifact
         uses: actions/upload-artifact@v4

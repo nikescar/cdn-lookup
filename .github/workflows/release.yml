@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
 
 env:
-  RUST_VERSION: 1.86.0
+  RUST_VERSION: 1.88.0
   BIN_NAME: "cdn-lookup"
 
 jobs:
@@ -188,7 +188,8 @@ jobs:
       - name: Build on OpenBSD
         shell: cpa.sh {0}
         run: |
-          sudo pkg_add rust
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${{ env.RUST_VERSION }}
+          . "$HOME/.cargo/env"
           cargo build --release --package ${{ env.BIN_NAME }}
 
       - name: Store artifact

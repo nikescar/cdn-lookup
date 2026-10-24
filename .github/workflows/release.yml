@@ -114,6 +114,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
+      - name: Install OpenSSL for macOS
+        if: contains(matrix.platform.target, 'apple-darwin')
+        run: |
+          brew install openssl@3
+          echo "OPENSSL_DIR=$(brew --prefix openssl@3)" >> $GITHUB_ENV
+
       # Linux & Windows
       - name: Install rust toolchain for Linux
         uses: actions-rs/toolchain@v1
@@ -193,7 +199,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Start OpenBSD VM
+      - name: Start ${{ matrix.platform.os }} VM
         uses: cross-platform-actions/action@v1.6.0
         with:
           operating_system: ${{ matrix.platform.os }}
@@ -203,11 +209,10 @@ jobs:
           cpu_count: 4
           sync_files: runner-to-vm
 
-      - name: Build on OpenBSD
+      - name: Build on ${{ matrix.platform.os }}
         shell: cpa.sh {0}
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${{ env.RUST_VERSION }}
-          . "$HOME/.cargo/env"
+          sudo pkg_add rust
           cargo build --release --package ${{ env.BIN_NAME }}
 
       - name: Store artifact

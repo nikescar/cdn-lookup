@@ -8,7 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
 use chrono::DateTime;
-use git2::{FetchOptions, Repository};
+use gix;
 use ipnet::IpNet;
 use regex::Regex;
 
@@ -54,43 +54,32 @@ impl GitRepoManager {
         let repo_path = self.repos_dir.join(repo_name);
 
         if repo_path.exists() {
-            // Pull latest
-            let repo = Repository::open(&repo_path)?;
-            let mut remote = repo.find_remote("origin")?;
+            // For updates, just re-clone (simple and handles force-pushes)
+            // Remove existing repo
+            fs::remove_dir_all(&repo_path)
+                .context("Failed to remove existing repository")?;
 
-            let mut fetch_opts = FetchOptions::new();
-            fetch_opts.depth(1);
-
-            remote.fetch(&[branch], Some(&mut fetch_opts), None)?;
-
-            let fetch_head = repo.find_reference("FETCH_HEAD")?;
-            let target_oid = fetch_head.target()
-                .ok_or_else(|| anyhow::anyhow!("FETCH_HEAD has no target"))?;
-
-            // For shallow clones, skip merge analysis (commits may not exist)
-            // Just reset to FETCH_HEAD to handle force-pushed history
-            let refname = format!("refs/heads/{}", branch);
-            match repo.find_reference(&refname) {
-                Ok(mut reference) => {
-                    reference.set_target(target_oid, "Update from fetch")?;
-                }
-                Err(_) => {
-                    repo.reference(&refname, target_oid, false, "Create branch")?;
-                }
-            }
-            repo.set_head(&refname)?;
-            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
-        } else {
-            // Shallow clone
-            let mut fetch_opts = FetchOptions::new();
-            fetch_opts.depth(1);
-
-            let mut builder = git2::build::RepoBuilder::new();
-            builder.fetch_options(fetch_opts);
-            builder.branch(branch);
-
-            builder.clone(repo_url, &repo_path)?;
+            // Fall through to clone
         }
+
+        // Shallow clone
+        let (mut checkout, _outcome) = gix::prepare_clone(repo_url, &repo_path)
+            .context("Failed to prepare clone")?
+            .with_shallow(gix::remote::fetch::Shallow::DepthAtRemote(
+                std::num::NonZeroU32::new(1).unwrap()
+            ))
+            .with_ref_name(Some(branch))
+            .context("Failed to set branch")?
+            .fetch_then_checkout(
+                gix::progress::Discard,
+                &std::sync::atomic::AtomicBool::default(),
+            )
+            .context("Failed to fetch")?;
+
+        let (_repo, _outcome) = checkout.main_worktree(
+            gix::progress::Discard,
+            &std::sync::atomic::AtomicBool::default(),
+        ).context("Failed to checkout working tree")?;
 
         Ok(repo_path)
     }

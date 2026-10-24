@@ -64,16 +64,22 @@ impl GitRepoManager {
             remote.fetch(&[branch], Some(&mut fetch_opts), None)?;
 
             let fetch_head = repo.find_reference("FETCH_HEAD")?;
-            let fetch_commit = repo.reference_to_annotated_commit(&fetch_head)?;
-            let (analysis, _) = repo.merge_analysis(&[&fetch_commit])?;
+            let target_oid = fetch_head.target()
+                .ok_or_else(|| anyhow::anyhow!("FETCH_HEAD has no target"))?;
 
-            if analysis.is_fast_forward() {
-                let refname = format!("refs/heads/{}", branch);
-                let mut reference = repo.find_reference(&refname)?;
-                reference.set_target(fetch_commit.id(), "Fast-forward")?;
-                repo.set_head(&refname)?;
-                repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
+            // For shallow clones, skip merge analysis (commits may not exist)
+            // Just reset to FETCH_HEAD to handle force-pushed history
+            let refname = format!("refs/heads/{}", branch);
+            match repo.find_reference(&refname) {
+                Ok(mut reference) => {
+                    reference.set_target(target_oid, "Update from fetch")?;
+                }
+                Err(_) => {
+                    repo.reference(&refname, target_oid, false, "Create branch")?;
+                }
             }
+            repo.set_head(&refname)?;
+            repo.checkout_head(Some(git2::build::CheckoutBuilder::default().force()))?;
         } else {
             // Shallow clone
             let mut fetch_opts = FetchOptions::new();
@@ -95,6 +101,10 @@ impl GitRepoManager {
 
         let repo_path = self.ensure_repo(&repo_url, &branch)?;
         let file_full_path = repo_path.join(&file_path);
+
+        if !file_full_path.exists() {
+            anyhow::bail!("File not found in repo: {} (expected at {:?})", file_path, file_full_path);
+        }
 
         fs::read_to_string(&file_full_path)
             .with_context(|| format!("Failed to read file: {:?}", file_full_path))
@@ -431,6 +441,12 @@ pub fn run_cdn_lookup(cdn_lookup: &mut CdnLookup, ip_addresses: &[String]) -> Re
     for provider in &cdn_lookup.providers.clone() {
         let cidr_file = cdn_lookup.config_dir.join(format!("{}.cidr", provider.name));
         if !cidr_file.exists() {
+            // Skip git:// URLs - they should have been handled during update_providers()
+            if provider.url.starts_with("git://") {
+                eprintln!("Warning: No CIDR file for git-based provider {} - file may not exist in repo", provider.name);
+                continue;
+            }
+
             eprintln!("Downloading initial data for {}...", provider.name);
             match minreq::get(&provider.url).send() {
                 Ok(response) => {

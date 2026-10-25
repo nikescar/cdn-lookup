@@ -215,7 +215,7 @@ jobs:
           elif [ "${{ matrix.platform.os }}" = "netbsd" ]; then
             sudo pkgin -y install git curl clang jq
           elif [ "${{ matrix.platform.os }}" = "openbsd" ]; then
-            doas pkg_add git
+            sudo pkg_add git rust rust-rustfmt python3 gmake xz curl cmake bash ggrep gdb libffi
           fi
 
       - name: Install Rust on ${{ matrix.platform.os }}
@@ -224,7 +224,7 @@ jobs:
           if [ "${{ matrix.platform.os }}" = "openbsd" ]; then
             git clone https://github.com/semarie/build-rust.git
             cd build-rust
-            echo "SUDO=doas" > ~/.build_rust.conf
+            echo "SUDO=sudo" > ~/.build_rust.conf
             ./build.sh init
             ./build.sh beta
             export PATH="$HOME/build-rust/install_dir/beta/bin:$PATH"

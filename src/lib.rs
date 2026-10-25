@@ -14,6 +14,162 @@ use regex::Regex;
 const PROVIDERS_URL: &str = "https://raw.githubusercontent.com/nikescar/cdn-lookup/refs/heads/main/providers.conf";
 const ONE_MONTH_SECONDS: u64 = 30 * 24 * 60 * 60; // 30 days in seconds
 
+fn convert_github_to_git(http_url: &str) -> Option<String> {
+    // https://raw.githubusercontent.com/owner/repo/refs/heads/branch/path/to/file.txt
+    // → git://github.com/owner/repo/branch/path/to/file.txt
+
+    if let Some(rest) = http_url.strip_prefix("https://raw.githubusercontent.com/") {
+        let parts: Vec<&str> = rest.split('/').collect();
+        if parts.len() >= 5 && parts[2] == "refs" && parts[3] == "heads" {
+            let owner = parts[0];
+            let repo = parts[1];
+            let branch = parts[4];
+            let file_path = parts[5..].join("/");
+
+            return Some(format!(
+                "git://github.com/{}/{}/{}/{}",
+                owner, repo, branch, file_path
+            ));
+        }
+    }
+
+    // Also handle github.com/owner/repo/raw/refs/heads/branch/path format
+    if let Some(rest) = http_url.strip_prefix("https://github.com/") {
+        let parts: Vec<&str> = rest.split('/').collect();
+        if parts.len() >= 7 && parts[2] == "raw" && parts[3] == "refs" && parts[4] == "heads" {
+            let owner = parts[0];
+            let repo = parts[1];
+            let branch = parts[5];
+            let file_path = parts[6..].join("/");
+
+            return Some(format!(
+                "git://github.com/{}/{}/{}/{}",
+                owner, repo, branch, file_path
+            ));
+        }
+    }
+
+    None
+}
+
+fn convert_git_to_http(git_url: &str) -> String {
+    // git://github.com/owner/repo/branch/path/to/file.txt
+    // → https://raw.githubusercontent.com/owner/repo/refs/heads/branch/path/to/file.txt
+
+    if let Some(rest) = git_url.strip_prefix("git://github.com/") {
+        let parts: Vec<&str> = rest.split('/').collect();
+        if parts.len() >= 4 {
+            let owner = parts[0];
+            let repo = parts[1];
+            let branch = parts[2];
+            let file_path = parts[3..].join("/");
+
+            return format!(
+                "https://raw.githubusercontent.com/{}/{}/refs/heads/{}/{}",
+                owner, repo, branch, file_path
+            );
+        }
+    }
+    git_url.to_string()
+}
+
+struct GitRepoManager {
+    repos_dir: PathBuf,
+}
+
+impl GitRepoManager {
+    fn new(config_dir: &PathBuf) -> Result<Self> {
+        let repos_dir = config_dir.join("repos");
+        if !repos_dir.exists() {
+            fs::create_dir_all(&repos_dir)?;
+        }
+        Ok(Self { repos_dir })
+    }
+
+    fn parse_git_url(&self, url: &str) -> Option<(String, String, String)> {
+        // Parse git://github.com/owner/repo/branch/file/path
+        if !url.starts_with("git://github.com/") {
+            return None;
+        }
+
+        let parts: Vec<&str> = url.strip_prefix("git://github.com/")?.split('/').collect();
+        if parts.len() < 4 {
+            return None;
+        }
+
+        let owner = parts[0];
+        let repo = parts[1];
+        let branch = parts[2];
+        let file_path = parts[3..].join("/");
+
+        let repo_url = format!("https://github.com/{}/{}", owner, repo);
+        Some((repo_url, branch.to_string(), file_path))
+    }
+
+    fn ensure_repo(&self, repo_url: &str, branch: &str) -> Result<PathBuf> {
+        let repo_name = repo_url.split('/').last()
+            .ok_or_else(|| anyhow::anyhow!("Invalid repo URL"))?;
+        let repo_path = self.repos_dir.join(repo_name);
+
+        if repo_path.exists() {
+            // Update existing repo: fetch + reset for shallow clones
+            let fetch = std::process::Command::new("git")
+                .args(["-C"])
+                .arg(&repo_path)
+                .args(["fetch", "--depth", "1", "origin", branch])
+                .output()
+                .context("Failed to execute git fetch")?;
+
+            if !fetch.status.success() {
+                let stderr = String::from_utf8_lossy(&fetch.stderr);
+                anyhow::bail!("git fetch failed: {}", stderr);
+            }
+
+            let reset = std::process::Command::new("git")
+                .args(["-C"])
+                .arg(&repo_path)
+                .args(["reset", "--hard", &format!("origin/{}", branch)])
+                .output()
+                .context("Failed to execute git reset")?;
+
+            if !reset.status.success() {
+                let stderr = String::from_utf8_lossy(&reset.stderr);
+                anyhow::bail!("git reset failed: {}", stderr);
+            }
+        } else {
+            // Clone new repo
+            let clone = std::process::Command::new("git")
+                .args(["clone", "--depth", "1", "--branch", branch, repo_url])
+                .arg(&repo_path)
+                .output()
+                .context("Failed to execute git clone")?;
+
+            if !clone.status.success() {
+                let stderr = String::from_utf8_lossy(&clone.stderr);
+                anyhow::bail!("git clone failed: {}", stderr);
+            }
+        }
+
+        Ok(repo_path)
+    }
+
+    fn read_file(&self, git_url: &str) -> Result<String> {
+        let (repo_url, branch, file_path) = self.parse_git_url(git_url)
+            .ok_or_else(|| anyhow::anyhow!("Invalid git URL: {}", git_url))?;
+
+        let repo_path = self.ensure_repo(&repo_url, &branch)
+            .with_context(|| format!("Failed to clone/update repo: {}", repo_url))?;
+        let file_full_path = repo_path.join(&file_path);
+
+        if !file_full_path.exists() {
+            anyhow::bail!("File not found in repo: {} (expected at {:?})", file_path, file_full_path);
+        }
+
+        fs::read_to_string(&file_full_path)
+            .with_context(|| format!("Failed to read file: {:?}", file_full_path))
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Provider {
     pub name: String,
@@ -47,18 +203,21 @@ pub struct CdnLookup {
     providers: Vec<Provider>,
     ip_ranges: HashMap<String, Vec<IpNet>>,
     refresh: bool,
+    git_manager: GitRepoManager,
 }
 
 impl CdnLookup {
     pub fn new(refresh: bool) -> Result<Self> {
         let config_dir = Self::get_config_dir()?;
         let providers = Self::load_providers(&config_dir)?;
+        let git_manager = GitRepoManager::new(&config_dir)?;
 
         Ok(Self {
             config_dir,
             providers,
             ip_ranges: HashMap::new(),
             refresh,
+            git_manager,
         })
     }
 
@@ -106,7 +265,6 @@ impl CdnLookup {
         let mut updated = false;
         let mut downloads = Vec::new();
 
-        // First pass: collect data to download
         for provider in &mut self.providers {
             let should_check_remote = self.refresh ||
                 current_timestamp - provider.last_checked_timestamp > ONE_MONTH_SECONDS;
@@ -114,42 +272,100 @@ impl CdnLookup {
             if should_check_remote {
                 eprintln!("Checking {} for updates...", provider.name);
 
-                // HEAD request to check Last-Modified
-                match minreq::head(&provider.url).send() {
-                    Ok(response) => {
-                        let remote_timestamp = if let Some(last_modified) = response.headers.get("last-modified") {
-                            if let Ok(datetime) = DateTime::parse_from_rfc2822(last_modified) {
-                                datetime.timestamp() as u64
-                            } else {
-                                current_timestamp
-                            }
-                        } else {
-                            current_timestamp
-                        };
+                // Auto-convert GitHub HTTPS URLs to git:// for deduplication
+                let git_url = convert_github_to_git(&provider.url);
+                let use_git = git_url.is_some() || provider.url.starts_with("git://");
+                let effective_url = git_url.as_ref().unwrap_or(&provider.url);
 
-                        if remote_timestamp > provider.last_response_timestamp {
-                            eprintln!("Downloading updated data for {}...", provider.name);
-                            if let Ok(response) = minreq::get(&provider.url).send() {
-                                if let Ok(content) = response.as_str() {
-                                    downloads.push((provider.name.clone(), content.to_string()));
-                                    provider.last_response_timestamp = remote_timestamp;
-                                    updated = true;
+                let content = if use_git {
+                    // Git-based provider (auto-detected or explicit git://)
+                    match self.git_manager.read_file(effective_url) {
+                        Ok(c) => {
+                            eprintln!("✓ {} (via git)", provider.name);
+                            provider.last_response_timestamp = current_timestamp;
+                            provider.last_checked_timestamp = current_timestamp;
+                            updated = true;
+                            Some(c)
+                        }
+                        Err(e) => {
+                            eprintln!("⚠ {} git failed, trying HTTP: {}", provider.name, e);
+                            // Convert git:// URL to HTTP and try fallback
+                            let http_url = convert_git_to_http(&provider.url);
+                            match minreq::get(&http_url).send() {
+                                Ok(response) => {
+                                    if let Ok(c) = response.as_str() {
+                                        eprintln!("✓ {} (via HTTP fallback)", provider.name);
+                                        provider.last_response_timestamp = current_timestamp;
+                                        provider.last_checked_timestamp = current_timestamp;
+                                        updated = true;
+                                        Some(c.to_string())
+                                    } else {
+                                        eprintln!("✗ Skipping {}: HTTP response decode failed", provider.name);
+                                        provider.last_checked_timestamp = current_timestamp;
+                                        None
+                                    }
+                                }
+                                Err(e) => {
+                                    eprintln!("✗ Skipping {}: {}", provider.name, e);
+                                    provider.last_checked_timestamp = current_timestamp;
+                                    None
                                 }
                             }
                         }
-                        provider.last_checked_timestamp = current_timestamp;
                     }
-                    Err(e) => {
-                        eprintln!("Warning: Skipping {}: {}", provider.name, e);
+                } else {
+                    // HTTP-based provider (existing logic)
+                    match minreq::head(&provider.url).send() {
+                        Ok(response) => {
+                            let remote_timestamp = if let Some(last_modified) = response.headers.get("last-modified") {
+                                if let Ok(datetime) = DateTime::parse_from_rfc2822(last_modified) {
+                                    datetime.timestamp() as u64
+                                } else {
+                                    current_timestamp
+                                }
+                            } else {
+                                current_timestamp
+                            };
+
+                            if remote_timestamp > provider.last_response_timestamp {
+                                match minreq::get(&provider.url).send() {
+                                    Ok(resp) => {
+                                        if let Ok(c) = resp.as_str() {
+                                            eprintln!("✓ {} (via HTTP)", provider.name);
+                                            provider.last_response_timestamp = remote_timestamp;
+                                            provider.last_checked_timestamp = current_timestamp;
+                                            updated = true;
+                                            Some(c.to_string())
+                                        } else {
+                                            provider.last_checked_timestamp = current_timestamp;
+                                            None
+                                        }
+                                    }
+                                    Err(_) => {
+                                        provider.last_checked_timestamp = current_timestamp;
+                                        None
+                                    }
+                                }
+                            } else {
+                                provider.last_checked_timestamp = current_timestamp;
+                                None
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("✗ Skipping {}: {}", provider.name, e);
+                            provider.last_checked_timestamp = current_timestamp;
+                            None
+                        }
                     }
+                };
+
+                if let Some(c) = content {
+                    downloads.push((provider.name.clone(), c));
                 }
-            } else {
-                // Update last checked timestamp without downloading
-                provider.last_checked_timestamp = current_timestamp;
             }
         }
 
-        // Second pass: process downloaded data
+        // Process downloaded data
         for (provider_name, content) in downloads {
             self.process_provider_data(&provider_name, &content)?;
         }

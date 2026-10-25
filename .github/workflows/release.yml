@@ -384,13 +384,13 @@ jobs:
                 continue
               fi
 
-              # Extract identifier from path
-              # For .exe files, use the filename
-              # For other files (binaries), use the parent directory name which contains platform info
+              # Extract identifier from path using parent directory (contains platform info)
+              # For .exe files, append .exe suffix to platform name
+              PLATFORM=$(basename "$(dirname "$file")")
               if [[ "$file" == *.exe ]]; then
-                identifier=$(basename "$file")
+                identifier="${PLATFORM}.exe"
               else
-                identifier=$(basename "$(dirname "$file")")
+                identifier="$PLATFORM"
               fi
 
               # Build markdown link

@@ -172,11 +172,12 @@ jobs:
             version: '7.9'
             target: x86_64-unknown-openbsd
 
-          - name: OpenBSD aarch64
-            os: openbsd
-            architecture: arm64
-            version: '7.9'
-            target: aarch64-unknown-openbsd
+          # OpenBSD aarch64 disabled: build-rust does not support arm64 architecture
+          #- name: OpenBSD aarch64
+          #  os: openbsd
+          #  architecture: arm64
+          #  version: '7.9'
+          #  target: aarch64-unknown-openbsd
 
           - name: NetBSD x86_64
             os: netbsd

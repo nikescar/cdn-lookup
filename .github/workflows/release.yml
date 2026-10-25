@@ -221,11 +221,8 @@ jobs:
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
           if [ "${{ matrix.platform.os }}" = "openbsd" ]; then
-            sed -i.bak '/DragonFly)/i\
-        OpenBSD)\
-            _ostype=unknown-openbsd\
-            ;;\
-' rustup-init.sh
+            awk '/DragonFly)/ {print "        OpenBSD)"; print "            _ostype=unknown-openbsd"; print "            ;;"; print ""} {print}' rustup-init.sh > rustup-init.sh.tmp
+            mv rustup-init.sh.tmp rustup-init.sh
           fi
           sh rustup-init.sh -y
           . $HOME/.cargo/env

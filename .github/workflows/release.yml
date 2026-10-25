@@ -214,6 +214,8 @@ jobs:
             sudo pkg install -y git protobuf llvm15
           elif [ "${{ matrix.platform.os }}" = "netbsd" ]; then
             sudo pkgin -y install git curl clang jq
+          elif [ "${{ matrix.platform.os }}" = "openbsd" ]; then
+            doas pkg_add git
           fi
 
       - name: Install Rust on ${{ matrix.platform.os }}

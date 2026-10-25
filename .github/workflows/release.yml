@@ -438,20 +438,18 @@ jobs:
           do
               if [ -d "$i" ]
               then
-                  # Handle Windows executables - keep as-is, no tar.gz
-                  if [[ "$i" == *"windows"* ]]; then
-                      cp "$i"/${{ env.BIN_NAME }}.exe distbin/$(basename "$i").exe 2>/dev/null || true
-                      continue
-                  fi
+                  PLATFORM=$(basename "$i")
 
-                  # Handle other platforms - tar compress
-                  cp LICENSE* "$i" 2>/dev/null || true
-                  cp README.md "$i" 2>/dev/null || true
-                  chmod +x "$i/${{ env.BIN_NAME }}" 1>/dev/null 2>&1 || true
-                  tar -cvpzf "${i}.tar.gz" --directory=${i} .
+                  # Handle Windows executables with arch/os in filename
+                  if [[ "$i" == *"windows"* ]]; then
+                      cp "$i"/${{ env.BIN_NAME }}.exe distbin/${PLATFORM}.exe 2>/dev/null || true
+                  else
+                      # Handle Unix binaries - copy directly with platform name
+                      chmod +x "$i/${{ env.BIN_NAME }}" 1>/dev/null 2>&1 || true
+                      cp "$i/${{ env.BIN_NAME }}" distbin/${PLATFORM} 2>/dev/null || true
+                  fi
               fi
           done
-          cp artifacts/*.tar.gz distbin/ 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3

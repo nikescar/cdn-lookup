@@ -90,7 +90,7 @@ jobs:
 
       - name: Setup Android SDK
         if: contains(matrix.platform.target, 'android')
-        uses: android-actions/setup-android@v3
+        uses: android-actions/setup-android@v4.0.4
 
       - name: Checkout Git repo
         uses: actions/checkout@v3

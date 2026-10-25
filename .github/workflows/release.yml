@@ -144,10 +144,6 @@ jobs:
             architecture: x86-64
             version: '15.1'
 
-          - name: freebsd
-            architecture: arm64
-            version: '15.1'
-
           - name: openbsd
             architecture: x86-64
             version: '8.0'
@@ -240,7 +236,6 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-freebsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-netbsd/${{ env.BIN_NAME }}; do
@@ -283,7 +278,6 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
-            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-freebsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-netbsd/${{ env.BIN_NAME }}

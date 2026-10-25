@@ -60,4 +60,3 @@ at your option.
 
 ## TODO
 
-- add openbsd release workflow.

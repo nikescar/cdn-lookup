@@ -166,11 +166,12 @@ jobs:
             version: '14.2'
             target: x86_64-unknown-freebsd
 
-          - name: OpenBSD x86_64
-            os: openbsd
-            architecture: x86-64
-            version: '7.9'
-            target: x86_64-unknown-openbsd
+          # OpenBSD x86_64 disabled: system rust 1.94.1 too old, kstring 2.0.5 requires rust 1.96+
+          #- name: OpenBSD x86_64
+          #  os: openbsd
+          #  architecture: x86-64
+          #  version: '7.9'
+          #  target: x86_64-unknown-openbsd
 
           # OpenBSD aarch64 disabled: build-rust does not support arm64 architecture
           #- name: OpenBSD aarch64

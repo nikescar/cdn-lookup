@@ -47,30 +47,49 @@ impl GitRepoManager {
         Some((repo_url, branch.to_string(), file_path))
     }
 
-    fn ensure_repo(&self, repo_url: &str, _branch: &str) -> Result<PathBuf> {
+    fn ensure_repo(&self, repo_url: &str, branch: &str) -> Result<PathBuf> {
         let repo_name = repo_url.split('/').last()
             .ok_or_else(|| anyhow::anyhow!("Invalid repo URL"))?;
         let repo_path = self.repos_dir.join(repo_name);
 
-        if !repo_path.exists() {
-            // Clone new repo using gix
-            match gix::prepare_clone(repo_url, &repo_path) {
-                Ok(mut prep) => {
-                    match prep.fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED) {
-                        Ok((_repo, _outcome)) => {},
-                        Err(e) => {
-                            eprintln!("gix fetch_then_checkout error for {}: {}", repo_url, e);
-                            anyhow::bail!("Failed to clone: {}", e);
-                        }
-                    }
-                }
-                Err(e) => {
-                    eprintln!("gix prepare_clone error for {}: {}", repo_url, e);
-                    anyhow::bail!("Failed to prepare clone: {}", e);
-                }
+        if repo_path.exists() {
+            // Update existing repo: fetch + reset for shallow clones
+            let fetch = std::process::Command::new("git")
+                .args(["-C"])
+                .arg(&repo_path)
+                .args(["fetch", "--depth", "1", "origin", branch])
+                .output()
+                .context("Failed to execute git fetch")?;
+
+            if !fetch.status.success() {
+                let stderr = String::from_utf8_lossy(&fetch.stderr);
+                anyhow::bail!("git fetch failed: {}", stderr);
+            }
+
+            let reset = std::process::Command::new("git")
+                .args(["-C"])
+                .arg(&repo_path)
+                .args(["reset", "--hard", &format!("origin/{}", branch)])
+                .output()
+                .context("Failed to execute git reset")?;
+
+            if !reset.status.success() {
+                let stderr = String::from_utf8_lossy(&reset.stderr);
+                anyhow::bail!("git reset failed: {}", stderr);
+            }
+        } else {
+            // Clone new repo
+            let clone = std::process::Command::new("git")
+                .args(["clone", "--depth", "1", "--branch", branch, repo_url])
+                .arg(&repo_path)
+                .output()
+                .context("Failed to execute git clone")?;
+
+            if !clone.status.success() {
+                let stderr = String::from_utf8_lossy(&clone.stderr);
+                anyhow::bail!("git clone failed: {}", stderr);
             }
         }
-        // If repo exists, just use it (no update for now - files are cached anyway)
 
         Ok(repo_path)
     }

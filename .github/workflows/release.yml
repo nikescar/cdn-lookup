@@ -214,12 +214,9 @@ jobs:
             sudo pkg install -y git protobuf llvm15
           elif [ "${{ matrix.platform.os }}" = "netbsd" ]; then
             sudo pkgin -y install git curl clang jq
-          elif [ "${{ matrix.platform.os }}" = "openbsd" ]; then
-            sudo pkg_add rust
           fi
 
       - name: Install Rust on ${{ matrix.platform.os }}
-        if: matrix.platform.os != 'openbsd'
         shell: cpa.sh {0}
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
@@ -230,11 +227,9 @@ jobs:
       - name: Build on ${{ matrix.platform.os }}
         shell: cpa.sh {0}
         run: |
-          if [ "${{ matrix.platform.os }}" != "openbsd" ]; then
-            . $HOME/.cargo/env
-            export CC=clang
-            export CXX=clang++
-          fi
+          . $HOME/.cargo/env
+          export CC=clang
+          export CXX=clang++
           export CARGO_TERM_COLOR=always
           cargo build --release --package ${{ env.BIN_NAME }} --target ${{ matrix.platform.target }}
 

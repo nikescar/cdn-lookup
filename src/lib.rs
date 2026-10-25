@@ -203,11 +203,12 @@ pub struct CdnLookup {
     providers: Vec<Provider>,
     ip_ranges: HashMap<String, Vec<IpNet>>,
     refresh: bool,
+    no_git: bool,
     git_manager: GitRepoManager,
 }
 
 impl CdnLookup {
-    pub fn new(refresh: bool) -> Result<Self> {
+    pub fn new(refresh: bool, no_git: bool) -> Result<Self> {
         let config_dir = Self::get_config_dir()?;
         let providers = Self::load_providers(&config_dir)?;
         let git_manager = GitRepoManager::new(&config_dir)?;
@@ -217,6 +218,7 @@ impl CdnLookup {
             providers,
             ip_ranges: HashMap::new(),
             refresh,
+            no_git,
             git_manager,
         })
     }
@@ -272,9 +274,13 @@ impl CdnLookup {
             if should_check_remote {
                 eprintln!("Checking {} for updates...", provider.name);
 
-                // Auto-convert GitHub HTTPS URLs to git:// for deduplication
-                let git_url = convert_github_to_git(&provider.url);
-                let use_git = git_url.is_some() || provider.url.starts_with("git://");
+                // Auto-convert GitHub HTTPS URLs to git:// for deduplication (unless --no-git)
+                let git_url = if !self.no_git {
+                    convert_github_to_git(&provider.url)
+                } else {
+                    None
+                };
+                let use_git = !self.no_git && (git_url.is_some() || provider.url.starts_with("git://"));
                 let effective_url = git_url.as_ref().unwrap_or(&provider.url);
 
                 let content = if use_git {

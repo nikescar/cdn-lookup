@@ -12,6 +12,10 @@ struct Cli {
     /// Force refresh all providers, ignoring cache
     #[arg(short, long)]
     refresh: bool,
+
+    /// Disable git sync, use HTTP only
+    #[arg(long)]
+    no_git: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -33,7 +37,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut cdn_lookup = CdnLookup::new(cli.refresh)?;
+    let mut cdn_lookup = CdnLookup::new(cli.refresh, cli.no_git)?;
     run_cdn_lookup(&mut cdn_lookup, &all_ips)?;
 
     Ok(())

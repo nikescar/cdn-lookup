@@ -13,7 +13,7 @@ regex = "1.10"
 ipnet = "2.9"
 chrono = "0.4"
 anyhow = "1.0"
-gix = { version = "0.81", features = ["blocking-network-client"] }
+gix = { version = "0.81", features = ["blocking-network-client", "blocking-http-transport-reqwest-rust-tls"] }
 
 [profile.release]
 lto = "fat"

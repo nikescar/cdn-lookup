@@ -52,24 +52,25 @@ impl GitRepoManager {
             .ok_or_else(|| anyhow::anyhow!("Invalid repo URL"))?;
         let repo_path = self.repos_dir.join(repo_name);
 
-        if repo_path.exists() {
-            // For shallow clones, delete and re-clone instead of pull
-            // to avoid "divergent branches" errors
-            std::fs::remove_dir_all(&repo_path)
-                .context("Failed to remove existing repo")?;
+        if !repo_path.exists() {
+            // Clone new repo using gix
+            match gix::prepare_clone(repo_url, &repo_path) {
+                Ok(mut prep) => {
+                    match prep.fetch_then_checkout(gix::progress::Discard, &gix::interrupt::IS_INTERRUPTED) {
+                        Ok((_repo, _outcome)) => {},
+                        Err(e) => {
+                            eprintln!("gix fetch_then_checkout error for {}: {}", repo_url, e);
+                            anyhow::bail!("Failed to clone: {}", e);
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("gix prepare_clone error for {}: {}", repo_url, e);
+                    anyhow::bail!("Failed to prepare clone: {}", e);
+                }
+            }
         }
-
-        // Clone repo
-        let output = std::process::Command::new("git")
-            .args(["clone", "--depth", "1", repo_url])
-            .arg(&repo_path)
-            .output()
-            .context("Failed to execute git clone")?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            anyhow::bail!("git clone failed: {}", stderr);
-        }
+        // If repo exists, just use it (no update for now - files are cached anyway)
 
         Ok(repo_path)
     }

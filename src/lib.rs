@@ -434,7 +434,15 @@ impl CdnLookup {
         match json {
             serde_json::Value::Array(arr) => {
                 for item in arr {
-                    self.extract_cidrs_from_json(item, cidrs);
+                    // Check if array contains direct CIDR strings
+                    if let serde_json::Value::String(s) = item {
+                        if let Ok(cidr) = s.parse::<IpNet>() {
+                            cidrs.push(cidr);
+                        }
+                    } else {
+                        // Recurse for non-string values (objects, nested arrays)
+                        self.extract_cidrs_from_json(item, cidrs);
+                    }
                 }
             }
             serde_json::Value::Object(obj) => {

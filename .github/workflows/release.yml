@@ -223,7 +223,7 @@ jobs:
         shell: cpa.sh {0}
         run: |
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-          source $HOME/.cargo/env
+          . $HOME/.cargo/env
           rustc --version
           cargo --version
 
@@ -231,7 +231,7 @@ jobs:
         shell: cpa.sh {0}
         run: |
           if [ "${{ matrix.platform.os }}" != "openbsd" ]; then
-            source $HOME/.cargo/env
+            . $HOME/.cargo/env
             export CC=clang
             export CXX=clang++
           fi

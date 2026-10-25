@@ -230,6 +230,9 @@ jobs:
             export PATH="$HOME/build-rust/install_dir/beta/bin:$PATH"
             cd ..
           else
+            if [ "${{ contains(matrix.platform.target, 'aarch64') }}" = "true" ]; then
+              export RUSTUP_CPUTYPE=aarch64
+            fi
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
             . $HOME/.cargo/env
           fi

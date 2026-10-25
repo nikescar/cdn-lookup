@@ -134,96 +134,79 @@ jobs:
           path: target/${{ matrix.platform.target }}/release${{ contains(matrix.platform.target, 'windows') && '-with-symbols' || '' }}/${{ env.BIN_NAME }}${{ contains(matrix.platform.target, 'windows') && '.exe' || '' }}
           retention-days: 1
 
-  build-freebsd:
-    name: Build - FreeBSD x86_64
+  build-bsd:
+    name: Build - ${{ matrix.os.name }} ${{ matrix.os.architecture }}
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - name: freebsd
+            architecture: x86-64
+            version: '15.1'
+
+          - name: freebsd
+            architecture: arm64
+            version: '15.1'
+
+          - name: openbsd
+            architecture: x86-64
+            version: '8.0'
+
+          - name: openbsd
+            architecture: arm64
+            version: '8.0'
+
+          - name: netbsd
+            architecture: x86-64
+            version: '11.0'
+
     steps:
       - uses: actions/checkout@v3
 
-      - name: Build x86_64-FreeBSD
+      - name: Build ${{ matrix.os.name }} ${{ matrix.os.architecture }}
         uses: cross-platform-actions/action@master
         with:
-          operating_system: freebsd
-          architecture: x86-64
-          version: '15.1'
+          operating_system: ${{ matrix.os.name }}
+          architecture: ${{ matrix.os.architecture }}
+          version: ${{ matrix.os.version }}
           shell: bash
           memory: 5G
           cpu_count: 4
           run: |
-            sudo pkg install -y git
-            curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source $HOME/.cargo/env
+            # FreeBSD package installation
+            if [ "${{ matrix.os.name }}" = "freebsd" ]; then
+              sudo pkg install -y git
+              curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source $HOME/.cargo/env
+            fi
+
+            # OpenBSD package installation
+            if [ "${{ matrix.os.name }}" = "openbsd" ]; then
+              sudo pkg_add rust git
+            fi
+
+            # NetBSD package installation
+            if [ "${{ matrix.os.name }}" = "netbsd" ]; then
+              sudo pkgin -y install git curl clang
+              curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              source "$HOME/.cargo/env"
+              export CC=clang
+              export CXX=clang++
+            fi
+
             export CARGO_TERM_COLOR=always
             cargo build --release --package ${{ env.BIN_NAME }}
 
       - name: Store artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.BIN_NAME }}-x86_64-unknown-freebsd
-          path: target/release/${{ env.BIN_NAME }}
-          retention-days: 1
-
-  build-openbsd:
-    name: Build - OpenBSD x86_64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build x86_64-OpenBSD
-        uses: cross-platform-actions/action@master
-        with:
-          operating_system: openbsd
-          architecture: x86-64
-          version: '8.0'
-          shell: bash
-          memory: 5G
-          cpu_count: 4
-          run: |
-            sudo pkg_add rust git
-            export CARGO_TERM_COLOR=always
-            cargo build --release --package ${{ env.BIN_NAME }}
-
-      - name: Store artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.BIN_NAME }}-x86_64-unknown-openbsd
-          path: target/release/${{ env.BIN_NAME }}
-          retention-days: 1
-
-  build-netbsd:
-    name: Build - NetBSD x86_64
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Build x86_64-NetBSD
-        uses: cross-platform-actions/action@master
-        with:
-          operating_system: netbsd
-          architecture: x86-64
-          version: '11.0'
-          shell: bash
-          memory: 5G
-          cpu_count: 4
-          run: |
-            sudo pkgin -y install git curl clang
-            curl --proto 'https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
-            source "$HOME/.cargo/env"
-            export CC=clang
-            export CXX=clang++
-            export CARGO_TERM_COLOR=always
-            cargo build --release --package ${{ env.BIN_NAME }}
-
-      - name: Store artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.BIN_NAME }}-x86_64-unknown-netbsd
+          name: ${{ env.BIN_NAME }}-${{ matrix.os.architecture == 'x86-64' && 'x86_64' || 'aarch64' }}-unknown-${{ matrix.os.name }}
           path: target/release/${{ env.BIN_NAME }}
           retention-days: 1
 
   release:
     name: Release
-    needs: [ build, build-freebsd, build-openbsd, build-netbsd ]
+    needs: [ build, build-bsd ]
     # We run the release job only if a tag starts with 'v' letter
     if: startsWith( github.ref, 'refs/tags/v' )
     runs-on: ubuntu-22.04
@@ -257,7 +240,9 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-freebsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-openbsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-netbsd/${{ env.BIN_NAME }}; do
             if [ -f "$file" ]; then
               echo "✓ Found: $file ($(stat -c%s "$file" 2>/dev/null || stat -f%z "$file" 2>/dev/null || echo "unknown") bytes)"
@@ -298,7 +283,9 @@ jobs:
             ./artifacts/${{ env.BIN_NAME }}-x86_64-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-i686-pc-windows-msvc/${{ env.BIN_NAME }}.exe \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-freebsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-freebsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-openbsd/${{ env.BIN_NAME }} \
+            ./artifacts/${{ env.BIN_NAME }}-aarch64-unknown-openbsd/${{ env.BIN_NAME }} \
             ./artifacts/${{ env.BIN_NAME }}-x86_64-unknown-netbsd/${{ env.BIN_NAME }}
 
       - name: Parse Analysis Results

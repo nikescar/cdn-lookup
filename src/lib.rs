@@ -196,6 +196,48 @@ impl Provider {
     pub fn to_line(&self) -> String {
         format!("{}|{}|{}|{}", self.name, self.url, self.last_response_timestamp, self.last_checked_timestamp)
     }
+
+    fn fetch_upstream_providers() -> Result<Vec<Provider>> {
+        let response = minreq::get(PROVIDERS_URL).send()?;
+        let content = response.as_str()?;
+
+        let mut providers = Vec::new();
+        for line in content.lines() {
+            let line = line.trim();
+            if !line.is_empty() && !line.starts_with('#') {
+                providers.push(Provider::from_line(line)?);
+            }
+        }
+        Ok(providers)
+    }
+
+    fn merge_providers(local: Vec<Provider>, upstream: Vec<Provider>) -> Vec<Provider> {
+        let mut merged = HashMap::new();
+
+        // Start with all local providers (includes user additions)
+        for provider in local {
+            merged.insert(provider.name.clone(), provider);
+        }
+
+        // Add new providers from upstream (don't overwrite existing)
+        for provider in upstream {
+            merged.entry(provider.name.clone())
+                .or_insert(provider);
+        }
+
+        // Convert back to Vec and sort by name for consistent ordering
+        let mut result: Vec<Provider> = merged.into_values().collect();
+        result.sort_by(|a, b| a.name.cmp(&b.name));
+        result
+    }
+
+    fn save_providers_to_file(path: &PathBuf, providers: &[Provider]) -> Result<()> {
+        let mut file = fs::File::create(path)?;
+        for provider in providers {
+            writeln!(file, "{}", provider.to_line())?;
+        }
+        Ok(())
+    }
 }
 
 pub struct CdnLookup {
@@ -237,29 +279,53 @@ impl CdnLookup {
 
     fn load_providers(config_dir: &PathBuf) -> Result<Vec<Provider>> {
         let providers_file = config_dir.join("providers.conf");
-        
-        // Download providers.conf if it doesn't exist
-        if !providers_file.exists() {
-            eprintln!("Downloading providers.conf...");
-            let response = minreq::get(PROVIDERS_URL).send()?;
-            let content = response.as_str()?;
+        let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
-            let mut file = fs::File::create(&providers_file)?;
-            file.write_all(content.as_bytes())?;
-        }
-
-        // Read and parse providers.conf
-        let content = fs::read_to_string(&providers_file)?;
-        let mut providers = Vec::new();
-        
-        for line in content.lines() {
-            let line = line.trim();
-            if !line.is_empty() && !line.starts_with('#') {
-                providers.push(Provider::from_line(line)?);
+        let local_providers = if providers_file.exists() {
+            // Load existing local providers
+            let content = fs::read_to_string(&providers_file)?;
+            let mut providers = Vec::new();
+            for line in content.lines() {
+                let line = line.trim();
+                if !line.is_empty() && !line.starts_with('#') {
+                    providers.push(Provider::from_line(line)?);
+                }
             }
-        }
 
-        Ok(providers)
+            // Check if we should update (monthly check)
+            let oldest_check = providers.iter()
+                .map(|p| p.last_checked_timestamp)
+                .min()
+                .unwrap_or(0);
+
+            if current_timestamp - oldest_check > ONE_MONTH_SECONDS {
+                eprintln!("Checking for new providers from upstream...");
+                match Provider::fetch_upstream_providers() {
+                    Ok(upstream) => {
+                        let merged = Provider::merge_providers(providers, upstream);
+                        // Save merged result
+                        Provider::save_providers_to_file(&providers_file, &merged)?;
+                        eprintln!("Providers updated from upstream");
+                        merged
+                    }
+                    Err(e) => {
+                        eprintln!("Warning: Failed to fetch upstream providers: {}", e);
+                        eprintln!("Continuing with local providers");
+                        providers // Use local on fetch failure
+                    }
+                }
+            } else {
+                providers
+            }
+        } else {
+            // First run: download and save
+            eprintln!("Downloading providers.conf...");
+            let upstream = Provider::fetch_upstream_providers()?;
+            Provider::save_providers_to_file(&providers_file, &upstream)?;
+            upstream
+        };
+
+        Ok(local_providers)
     }
 
     pub fn update_providers(&mut self) -> Result<()> {
@@ -394,8 +460,10 @@ impl CdnLookup {
             if let Ok(json) = serde_json::from_str::<serde_json::Value>(content) {
                 self.extract_cidrs_from_json(&json, &mut cidrs);
             }
-        } else {
-            // Plain text format (existing logic)
+        }
+
+        // Fallback to regex if JSON returned 0 results or wasn't JSON
+        if cidrs.is_empty() {
             let ip_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b")?;
             let cidr_regex = Regex::new(r"\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}/[0-9]{1,2}\b")?;
 
@@ -475,13 +543,7 @@ impl CdnLookup {
 
     fn save_providers(&self) -> Result<()> {
         let providers_file = self.config_dir.join("providers.conf");
-        let mut file = fs::File::create(&providers_file)?;
-        
-        for provider in &self.providers {
-            writeln!(file, "{}", provider.to_line())?;
-        }
-
-        Ok(())
+        Provider::save_providers_to_file(&providers_file, &self.providers)
     }
 
     pub fn load_all_cidr_ranges(&mut self) -> Result<()> {

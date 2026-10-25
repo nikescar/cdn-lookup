@@ -4,7 +4,7 @@ use cdn_lookup::{CdnLookup, run_cdn_lookup};
 #[derive(Parser)]
 #[command(name = "cdn-lookup")]
 #[command(about = "A tool to check if IP addresses belong to CDN providers")]
-#[command(version = env!("CARGO_PKG_VERSION"))]
+#[command(version = env!("GIT_VERSION"))]
 struct Cli {
     /// IP addresses to check, separated by spaces
     ip_addresses: Vec<String>,

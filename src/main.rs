@@ -13,9 +13,9 @@ struct Cli {
     #[arg(short, long)]
     refresh: bool,
 
-    /// Disable git sync, use HTTP only
-    #[arg(long)]
-    no_git: bool,
+    /// Enable git sync for GitHub URLs (faster, reduces bandwidth)
+    #[arg(short, long)]
+    git: bool,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -37,7 +37,7 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut cdn_lookup = CdnLookup::new(cli.refresh, cli.no_git)?;
+    let mut cdn_lookup = CdnLookup::new(cli.refresh, !cli.git)?;
     run_cdn_lookup(&mut cdn_lookup, &all_ips)?;
 
     Ok(())

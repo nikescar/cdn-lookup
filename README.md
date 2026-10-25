@@ -5,7 +5,12 @@ A Rust-based CLI tool that identifies which CDN, cloud provider, or network serv
 ## Installation
 
 ```bash
-cargo build --release
+# with cargo install
+$ cargo install --git https://github.com/nikescar/cdn-lookup.git
+
+# with git clone
+$ git clone https://github.com/nikescar/cdn-lookup.git
+$ cargo build --release
 ```
 
 ## Usage

@@ -219,20 +219,29 @@ jobs:
       - name: Install Rust on ${{ matrix.platform.os }}
         shell: cpa.sh {0}
         run: |
-          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs -o rustup-init.sh
           if [ "${{ matrix.platform.os }}" = "openbsd" ]; then
-            awk '/DragonFly)/ {print "        OpenBSD)"; print "            _ostype=unknown-openbsd"; print "            ;;"; print ""} {print}' rustup-init.sh > rustup-init.sh.tmp
-            mv rustup-init.sh.tmp rustup-init.sh
+            git clone https://github.com/semarie/build-rust.git
+            cd build-rust
+            echo "SUDO=doas" > ~/.build_rust.conf
+            ./build.sh init
+            ./build.sh beta
+            export PATH="$HOME/build-rust/install_dir/beta/bin:$PATH"
+            cd ..
+          else
+            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+            . $HOME/.cargo/env
           fi
-          sh rustup-init.sh -y
-          . $HOME/.cargo/env
           rustc --version
           cargo --version
 
       - name: Build on ${{ matrix.platform.os }}
         shell: cpa.sh {0}
         run: |
-          . $HOME/.cargo/env
+          if [ "${{ matrix.platform.os }}" = "openbsd" ]; then
+            export PATH="$HOME/build-rust/install_dir/beta/bin:$PATH"
+          else
+            . $HOME/.cargo/env
+          fi
           export CC=clang
           export CXX=clang++
           export CARGO_TERM_COLOR=always

@@ -1,6 +1,6 @@
 # CDN Lookup Tool
 
-A Rust-based CLI tool that identifies which CDN, cloud provider, or network service an IP address belongs to. Automatically downloads and caches IP ranges from 118+ providers, with monthly updates. Fast lookup using efficient CIDR range matching.
+A Rust-based CLI tool that identifies which CDN, cloud provider, or network service an IP address belongs to. Automatically downloads and caches IP ranges from 216+ providers, with monthly updates. Fast lookup using efficient CIDR range matching.
 
 ## Installation
 
@@ -39,7 +39,7 @@ $ cdn-lookup 8.8.8.8 104.16.123.96 192.168.1.1
 192.168.1.1: -
 ```
 
-## Supported Providers (118+)
+## Supported Providers (216+)
 
 | Category | Providers |
 |----------|-----------|
@@ -51,7 +51,8 @@ $ cdn-lookup 8.8.8.8 104.16.123.96 192.168.1.1
 | **Monitoring (15)** | Better Stack, Checkly, Grafana Synthetic Monitoring, HetrixTools, New Relic Synthetics, NodePing, Oh Dear, Pingdom, Sentry Uptime, Site24x7, StatusCake, updown.io, UptimeRobot, Uptrends |
 | **Security Scanners (7)** | Detectify, Intruder, Invicti, Qualys, Rapid7 InsightAppSec, Tenable Cloud Scanners, Cortex Xpanse |
 | **VPN & Anonymisers (8)** | AirVPN, Apple Private Relay, IVPN, Mullvad, ProtonVPN, Surfshark, Tor Exit Nodes, X4BNet VPN |
-| **Threat Intelligence (13)** | Spamhaus ASN-DROP, Binary Defense, Blocklist.de, CINS Army List, Team Cymru Bogons, DShield Recommended Block List, Emerging Threats Compromised IPs, abuse.ch Feodo Tracker, GreenSnow, IPsum, Spamhaus DROP, StopForumSpam, abuse.ch ThreatFox |
+| **Korean ISPs (97)** | KT (kornet, ktnet, ktcloud-net), SK Telecom (sk-net, sk-telecom-net, sktelink), LG (lgtelecom, lg-net, lg-hellovision), and 91 more cable/fiber/hosting providers |
+| **Threat Intelligence (14)** | Stalkerware C2 Indicators, Spamhaus ASN-DROP, Binary Defense, Blocklist.de, CINS Army List, Team Cymru Bogons, DShield Recommended Block List, Emerging Threats Compromised IPs, abuse.ch Feodo Tracker, GreenSnow, IPsum, Spamhaus DROP, StopForumSpam, abuse.ch ThreatFox |
 | **Other Services (8)** | AhrefsBot, Bingbot, GoCache, Google Cloud Platform |
 
 ## License
